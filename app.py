@@ -30,7 +30,10 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
 
 # Client Gemini
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL = "gemini-2.5-flash"
+# gemini-2.5-flash ormai è riservato ai progetti che lo usavano già: per i progetti nuovi servono i modelli 3.x.
+# Con la variabile d'ambiente GEMINI_MODEL si può forzare un modello; altrimenti prova questi, in ordine.
+_modello_env = os.getenv("GEMINI_MODEL")
+MODELLI = [_modello_env] if _modello_env else ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
 
 # Server web per Render (va pingato dall'esterno, es. UptimeRobot, per evitare lo sleep)
 app_web = Flask(__name__)
@@ -83,10 +86,8 @@ SAFETY_SETTINGS = [
 GEN_CONFIG = types.GenerateContentConfig(
     system_instruction=SYSTEM_PROMPT,
     temperature=0.9,
-    max_output_tokens=300,
+    max_output_tokens=1024,
     safety_settings=SAFETY_SETTINGS,
-    # Niente "thinking": risposte più rapide e il budget di token resta per il testo
-    thinking_config=types.ThinkingConfig(thinking_budget=0),
 )
 
 FALLBACK_ERRORE = "Oh, cazzo, il cervello mi è andato in pappa. Riprova più tardi."
@@ -123,7 +124,13 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     menzionato = bool(bot_username) and f"@{bot_username}".lower() in msg.text.lower()
 
     # Nei gruppi risponde solo se menzionato o se è un reply a un suo messaggio
+    logger.info(
+        "Messaggio ricevuto: chat=%s privato=%s reply_al_bot=%s menzionato=%s testo=%r",
+        msg.chat.type, in_privato, reply_al_bot, menzionato, msg.text[:80],
+    )
+
     if not (in_privato or reply_al_bot or menzionato):
+        logger.info("Messaggio ignorato (non è per me).")
         return
 
     user_id = msg.from_user.id if msg.from_user else 0
@@ -137,19 +144,26 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not testo_utente:
         testo_utente = "(nessuna domanda, l'utente ti ha solo chiamato)"
 
-    try:
-        # Client async: non blocca l'event loop
-        response = await client.aio.models.generate_content(
-            model=MODEL,
-            contents=f"Domanda dell'utente: '{testo_utente}'",
-            config=GEN_CONFIG,
-        )
-        testo_risposta = response.text or FALLBACK_VUOTO
-    except Exception:
-        logger.exception("Errore chiamata Gemini")
-        testo_risposta = FALLBACK_ERRORE
+    testo_risposta = FALLBACK_ERRORE
+    for modello in MODELLI:
+        try:
+            # Client async: non blocca l'event loop
+            response = await client.aio.models.generate_content(
+                model=modello,
+                contents=f"Domanda dell'utente: '{testo_utente}'",
+                config=GEN_CONFIG,
+            )
+            testo_risposta = response.text or FALLBACK_VUOTO
+            break
+        except Exception:
+            logger.exception("Errore chiamata Gemini (modello %s)", modello)
 
     await msg.reply_text(testo_risposta)
+
+
+async def avvio(application):
+    me = await application.bot.get_me()
+    logger.info("Connesso a Telegram come @%s (id %s)", me.username, me.id)
 
 
 def main():
@@ -161,7 +175,7 @@ def main():
     Thread(target=keep_alive, daemon=True).start()
 
     # Bot Telegram
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(avvio).build()
 
     # Il filtro fine è dentro la funzione (privato / reply al bot / menzione)
     app.add_handler(
