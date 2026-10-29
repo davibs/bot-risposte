@@ -72,7 +72,7 @@ Sei il "Libro delle Risposte", ma in versione cinica, tagliente, ironica e schie
 Gli utenti ti scriveranno nel gruppo o in privato per chiederti consigli o porre domande esistenziali.
 Il tuo compito è rispondere in modo imprevedibile, prendendo in giro con ironia l'utente per le sue ansie, ma dando comunque una specie di responso (sì, no, forse, scordatelo).
 Mantieni le risposte brevi e dirette, massimo 2-3 frasi. Usa liberamente imprecazioni leggere o intercalari popolari per rendere il tutto verace.
-Rispondi sempre in italiano.
+Rispondi sempre in italiano, in testo semplice: niente markdown, niente asterischi, niente elenchi.
 """
 
 # Safety settings allentati, utili con un prompt volgare/sarcastico
@@ -86,7 +86,7 @@ SAFETY_SETTINGS = [
 GEN_CONFIG = types.GenerateContentConfig(
     system_instruction=SYSTEM_PROMPT,
     temperature=0.9,
-    max_output_tokens=1024,
+    max_output_tokens=4096,  # largo: i modelli 3.x usano token anche per "ragionare" prima di rispondere
     safety_settings=SAFETY_SETTINGS,
 )
 
@@ -124,13 +124,13 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     menzionato = bool(bot_username) and f"@{bot_username}".lower() in msg.text.lower()
 
     # Nei gruppi risponde solo se menzionato o se è un reply a un suo messaggio
+    # Nel log niente testo dei messaggi: solo il tipo di chat e se il bot è stato chiamato
     logger.info(
-        "Messaggio ricevuto: chat=%s privato=%s reply_al_bot=%s menzionato=%s testo=%r",
-        msg.chat.type, in_privato, reply_al_bot, menzionato, msg.text[:80],
+        "Messaggio ricevuto: chat=%s privato=%s reply_al_bot=%s menzionato=%s",
+        msg.chat.type, in_privato, reply_al_bot, menzionato,
     )
 
     if not (in_privato or reply_al_bot or menzionato):
-        logger.info("Messaggio ignorato (non è per me).")
         return
 
     user_id = msg.from_user.id if msg.from_user else 0
@@ -153,8 +153,18 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 contents=f"Domanda dell'utente: '{testo_utente}'",
                 config=GEN_CONFIG,
             )
-            testo_risposta = response.text or FALLBACK_VUOTO
-            break
+            testo = (response.text or "").replace("**", "").strip()
+            if testo:
+                testo_risposta = testo
+                break
+            # Risposta vuota: scrivo nei log il motivo (blocco di sicurezza, token finiti, ecc.)
+            # e provo col modello successivo
+            motivo = response.candidates[0].finish_reason if response.candidates else None
+            logger.warning(
+                "Risposta vuota da %s: finish_reason=%s prompt_feedback=%s",
+                modello, motivo, response.prompt_feedback,
+            )
+            testo_risposta = FALLBACK_VUOTO
         except Exception:
             logger.exception("Errore chiamata Gemini (modello %s)", modello)
 
