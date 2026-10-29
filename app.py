@@ -1,5 +1,7 @@
 import os
 import logging
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from google import genai
@@ -13,10 +15,21 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Inizializza il client di Gemini
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+# Server web fittizio per tenere felice Render
+app_web = Flask(__name__)
+
+@app_web.route('/')
+def home():
+    return "Bot attivo e operativo, zio!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app_web.run(host="0.0.0.0", port=port)
+
 # Personalità del bot
 SYSTEM_PROMPT = """
 Sei il "Libro delle Risposte", ma in versione cinica, tagliente, ironica e schietta, con un linguaggio colorito, strada e leggermente volgare.
-Gli utenti ti scriveranno nel gruppo per chiedersi consigli o porre domande esistenziali.
+Gli utenti ti scriveranno nel gruppo per chiederti consigli o porre domande esistenziali.
 Il tuo compito è rispondere in modo imprevedibile, insultando ironicamente l'utente o prendendolo in giro per le sue ansie, ma dando comunque una specie di responso (sì, no, forse, scordatelo).
 Mantieni le risposte brevi e dirette, massimo 2-3 frasi. Usa liberamente imprecazioni leggere o intercalari popolari per rendere il tutto verace.
 """
@@ -25,7 +38,6 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     
-    # Pulisce il testo rimuovendo la menzione del bot
     testo_utente = update.message.text
     bot_username = context.bot.username
     if bot_username:
@@ -48,12 +60,16 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(testo_risposta)
 
 def main():
+    # Avvia il server web in un thread separato
+    t = Thread(target=run_web)
+    t.daemon = True
+    t.start()
+
+    # Avvia il bot Telegram
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
-    # Risponde SOLO se viene menzionato o se gli si risponde direttamente
     app.add_handler(MessageHandler(filters.TEXT & (filters.UpdateType.MESSAGE & (filters.REPLY | filters.Entity("mention"))), rispondi_con_ia))
     
-    print("Bot IA avviato su cloud...")
+    print("Bot IA avviato su cloud con server web integrato...")
     app.run_polling()
 
 if __name__ == "__main__":
