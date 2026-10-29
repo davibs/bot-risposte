@@ -73,11 +73,12 @@ Gli utenti ti scriveranno nel gruppo o in privato per chiederti consigli o porre
 Il tuo compito è rispondere in modo imprevedibile, prendendo in giro con ironia l'utente per le sue ansie, ma dando comunque una specie di responso (sì, no, forse, scordatelo).
 Mantieni le risposte brevi e dirette, massimo 2-3 frasi. Usa liberamente imprecazioni leggere o intercalari popolari per rendere il tutto verace.
 Rispondi sempre in italiano, in testo semplice: niente markdown, niente asterischi, niente elenchi.
+Sono sfottò da amici: prendi in giro le ansie e le domande, ma niente insulti su razza, religione, orientamento sessuale, aspetto fisico o disabilità.
 """
 
 # Safety settings allentati, utili con un prompt volgare/sarcastico
 SAFETY_SETTINGS = [
-    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
+    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
     types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
     types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
@@ -159,10 +160,13 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
             # Risposta vuota: scrivo nei log il motivo (blocco di sicurezza, token finiti, ecc.)
             # e provo col modello successivo
-            motivo = response.candidates[0].finish_reason if response.candidates else None
+            cand = response.candidates[0] if response.candidates else None
             logger.warning(
-                "Risposta vuota da %s: finish_reason=%s prompt_feedback=%s",
-                modello, motivo, response.prompt_feedback,
+                "Risposta vuota da %s: finish_reason=%s prompt_feedback=%s safety_ratings=%s",
+                modello,
+                cand.finish_reason if cand else None,
+                response.prompt_feedback,
+                cand.safety_ratings if cand else None,
             )
             testo_risposta = FALLBACK_VUOTO
         except Exception:
