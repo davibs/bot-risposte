@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 import logging
+import urllib.request
 from threading import Thread
 
 from flask import Flask
@@ -39,6 +40,23 @@ def home():
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app_web.run(host="0.0.0.0", port=port)
+
+
+def keep_alive():
+    """Pinga l'URL pubblico del servizio ogni 10 minuti per evitare lo standby di Render.
+    Render imposta RENDER_EXTERNAL_URL in automatico."""
+    url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not url:
+        logger.info("RENDER_EXTERNAL_URL non trovato: keep-alive disattivato (probabile esecuzione locale).")
+        return
+    time.sleep(60)  # lascia il tempo al server di partire
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=15) as r:
+                logger.info("Keep-alive ping OK (%s)", r.status)
+        except Exception as e:
+            logger.warning("Keep-alive ping fallito: %s", e)
+        time.sleep(600)
 
 
 # Personalità del bot
@@ -134,6 +152,9 @@ def main():
     # Server web in un thread separato
     t = Thread(target=run_web, daemon=True)
     t.start()
+
+    # Auto-ping per evitare lo standby
+    Thread(target=keep_alive, daemon=True).start()
 
     # Bot Telegram
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
