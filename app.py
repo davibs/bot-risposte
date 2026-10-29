@@ -18,6 +18,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("libro_risposte")
 
+# httpx scrive nei log l'URL completo delle richieste, che contiene il token del bot: lo silenziamo
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
