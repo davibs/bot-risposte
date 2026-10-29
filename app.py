@@ -29,7 +29,7 @@ def run_web():
 # Personalità del bot
 SYSTEM_PROMPT = """
 Sei il "Libro delle Risposte", ma in versione cinica, tagliente, ironica e schietta, con un linguaggio colorito, strada e leggermente volgare.
-Gli utenti ti scriveranno nel gruppo per chiederti consigli o porre domande esistenziali.
+Gli utenti ti scriveranno nel gruppo o in privato per chiederti consigli o porre domande esistenziali.
 Il tuo compito è rispondere in modo imprevedibile, insultando ironicamente l'utente o prendendolo in giro per le sue ansie, ma dando comunque una specie di responso (sì, no, forse, scordatelo).
 Mantieni le risposte brevi e dirette, massimo 2-3 frasi. Usa liberamente imprecazioni leggere o intercalari popolari per rendere il tutto verace.
 """
@@ -67,10 +67,16 @@ def main():
 
     # Avvia il bot Telegram
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (filters.UpdateType.MESSAGE & (filters.REPLY | filters.Entity("mention"))), rispondi_con_ia))
+    
+    # Filtro: risponde in chat privata OPPURE nei gruppi se c'è un reply o una menzione
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.UpdateType.MESSAGE & 
+        (filters.ChatType.PRIVATE | filters.REPLY | filters.Entity("mention")), 
+        rispondi_con_ia
+    ))
     
     print("Bot IA avviato su cloud con server web integrato...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
