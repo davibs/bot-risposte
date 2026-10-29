@@ -124,14 +124,14 @@ async def rispondi_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     menzionato = bool(bot_username) and f"@{bot_username}".lower() in msg.text.lower()
 
-    # Nei gruppi risponde solo se menzionato o se è un reply a un suo messaggio
+    # In privato risponde sempre; nei gruppi solo se viene menzionato con @
     # Nel log niente testo dei messaggi: solo il tipo di chat e se il bot è stato chiamato
     logger.info(
         "Messaggio ricevuto: chat=%s privato=%s reply_al_bot=%s menzionato=%s",
         msg.chat.type, in_privato, reply_al_bot, menzionato,
     )
 
-    if not (in_privato or reply_al_bot or menzionato):
+    if not (in_privato or menzionato):
         return
 
     user_id = msg.from_user.id if msg.from_user else 0
